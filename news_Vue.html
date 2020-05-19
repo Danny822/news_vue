@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>news_vue</title>
+</head>
+<style>
+    #pane{
+        position: fixed;
+        top: 0;
+        right: 0;
+    }
+    .blue{
+        background-color: rgb(147, 201, 223);
+    }
+    .red{
+        background-color: rgb(236, 174, 200);
+    }
+</style>
+<body>
+    <!-- Vue實例的掛載點 -->
+    <div id="app">
+        <div id="lang">
+            <label><input name="language" type="radio" value="ja" v-model:checked='lang' @change='default_data(lang)'/>日版</label>
+            <label><input name="language" type="radio" value="zh_Hant"v-model:checked='lang' @change='default_data(lang)'/>台版</label>
+        </div>
+        <div id="category" style="display:flex">
+            <ul v-for='data in category_data'>
+                <li>
+                    <a href="javascript:void(0);"  @click="get_page_list(data.id)">{{data.name}}</a>
+                </li>
+            </ul>
+        </div>
+        <div id="search">
+            <input type="text" id="search_input" :placeholder="default_inputType" v-model="yourtype">
+            <input type="button" value="搜尋" @click='search_title()'>
+        </div>
+    
+        <div id="content">
+            <ol>
+                <li v-for='(list_data,key) in board_list'>
+                    <div :class="{blue:key%2 == 0,red:key%2 == 1}" >
+                        <a href="javascript:void(0);" @click="get_board_data(list_data._id,lang)" v-show='isShow'>{{list_data['title_'+lang]}}</a>
+                    </div>
+                </li>
+            </ol>
+        </div>
+        <div id="area">
+            <input type="button" value="上一頁" @click="prePage">
+            <select id="all"  v-model="nowindex" @change="on_page_button($event)">
+                <option :value="num" v-for='num in now_total_page'>{{num}}</option>
+            </select>
+            <!-- {{ selected }}
+            {{ page }} -->
+            <!-- {{ nowindex }}
+            {{ category_id }} -->
+            <!-- {{ now_total_page }} -->
+            <input type="button" value="下一頁"  @click="nextPage">
+        </div>
+        <div id="page"></div>
+        <div id="show_news"></div>
+        <!-- <div id="pane">
+            <a href="#lang">回最上層</a><br>
+            <a href="#show_news">到查詢內文</a><br>
+        </div> -->
+    </div>
+    
+    <!-- Vue 的 CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vue/2.6.10/vue.common.dev.js"></script>
+    <!-- Axios 的 CDN -->
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+
+    <!-- Vue實例程式 -->
+    <script>
+        new Vue({
+            el:'#app',
+            data:{
+                server_url:'http://192.168.133.161:8000/api/v1/boards/',
+                lang:'ja', //radio button預設值
+                board_list:[], //公告title清單
+                board_data:[], //公告內文資訊
+                category_data:[],  //news型態
+                default_inputType:'請輸入型別',
+                yourtype:'', //使用者輸入的收尋型別
+                isShow:true,
+                page_limit:5, //每頁顯示筆數限制
+                page:1,    //頁面顯示在第幾頁
+                nowindex:1, //當前頁面顯示在第幾頁
+                now_total_page:1, //當前所選到的類型頁面顯示總共會有幾頁
+                // selected:'1', //下拉分頁選到的頁數value
+                category_id:'' //news型別
+            },
+            async created(){
+                this.category_data = await this.category()
+            },
+            computed:{
+            
+            },
+            watch:{
+                category_id:{
+                    async handler(category_id){
+                        // console.log(222)
+                        let listData = await axios.get(`${this.server_url}list/sys/${category_id}?lang=${this.lang}&limit=${this.page_limit}&page=${this.page}`).then(res => {
+                        this.board_list= res.data.data
+                        this.get_num(category_id)
+                        this.nowindex = page
+                        return (this.board_list)
+                    })
+                }
+            }},
+            methods:{
+                // 點選語系切換就顯示全部資訊
+                default_data(lang){
+                    console.log(lang)
+                    console.log(this.server_url)
+                    this.get_page_list("all",lang,1)
+                },
+                // 取得最新消息類別 API
+                async category() {
+                    let respNewsData = await axios.get(`${this.server_url}category`).then(res => {
+                    let category_type = res.data.data
+                    category_type.push({ord:(category_type.length)+1,id:"all",name:"全部"})
+                    // console.log(category_type)
+                    for(let i=0; i< category_type.length; i++){
+                        let category_name = category_type[i].name
+                        if(category_name =="sys"){
+                            category_type[i].name = "系統"
+                        }else if(category_name =="act"){
+                            category_type[i].name = "活動"
+                        }else if(category_name =="service"){
+                            category_type[i].name = "客服"
+                        }else{
+                            category_type[i].name = "全部"
+                        }
+                    }
+                    return (category_type)
+                    })
+                    return respNewsData 
+                },
+                // 取得列表清單
+                get_page_list(category_id){
+                    
+                        this.category_id = category_id
+                        console.log(category_id)
+                        // let listData = await axios.get(`${this.server_url}list/sys/${category_id}?lang=${this.lang}&limit=${this.page_limit}&page=${page}`).then(res => {
+                        // this.board_list= res.data.data
+                        // this.get_num(category_id)
+                        // this.nowindex = page
+                        // return (this.board_list)
+                    // return listData
+                },
+                // 取得單筆公告內容
+                async get_board_data(board_id,lang){
+                        let boardData = await axios.get(`${this.server_url}sys/${board_id}?lang=${this.lang}`).then(res => {
+                        this.board_data= res.data.data
+                        // console.log(this.board_data)
+                        let board_data_title = this.board_data.title_ja; //標題
+                        // console.log(board_data_title)
+                        let content_base64 = this.board_data.html_ja; //內文
+                        // console.log(content_base64)
+                    
+                        //內文 base64轉碼
+                        let decode_data = decodeURIComponent(escape(atob(content_base64)));
+                        // console.log(decode_data)
+                        alert("[標題:" + board_data_title + "]\n" + decode_data + "\n");
+                        // return (this.board_data)
+                    })
+                },
+                async get_num(cat_id) {
+                        let boardPage = await axios.get(`${this.server_url}num/sys?lang=${this.lang}&type=${cat_id}`).then(res => {
+                        // console.log(res.data.data)
+                        
+                        // 資料總筆數
+                        let total_num = res.data.data
+
+                        // 計算總頁數
+                        let total_page = Math.ceil(total_num / this.page_limit);
+                        console.log(total_page)
+                        
+                        // 當下所選擇的型態總頁數指給now_total_page
+                        this.now_total_page = total_page;
+                    
+                    })
+                },
+                search_title(){
+                    // alert(`選擇類型為${this.yourtype}`)
+                    let search_id = "";
+                    if (this.yourtype == "全部") {
+                    search_id = "all";
+                    } else if (this.yourtype == "系統") {
+                    search_id = "146003889414";
+                    } else if (this.yourtype == "活動") {
+                    search_id = "147988167211";
+                    } else if (this.yourtype == "客服") {
+                    search_id = "147988314738";
+                    } else {
+                    alert("請輸入正確型別 !!");
+                    this.get_page_list("all",lang, 1);
+                } 
+                    // 取得公告列表
+                    this.get_page_list(search_id, lang, 1);
+                },
+                on_page_button(event){
+                    this.nowindex = parseInt(event.target.value)
+                    // console.log(this.nowindex)
+
+                     // 取得公告列表
+                    this.get_page_list(this.category_id, lang, this.nowindex);
+                },
+                prePage(){
+                    if(this.nowindex<=1){
+                        this.nowindex = 1
+                    }else{
+                        this.nowindex = this.nowindex - 1
+                    }
+                    // 取得公告列表
+                    this.get_page_list(this.category_id, lang, this.nowindex);
+                },
+                nextPage(){
+                    if (this.nowindex >= this.now_total_page) {
+                        this.nowindex = this.now_total_page;
+                    } else {
+                        this.nowindex = this.nowindex + 1;
+                    }
+                    // 取得公告列表
+                    this.get_page_list(this.category_id, lang, this.nowindex);
+                }
+            },
+            beforeMount () {
+                this.get_page_list("all")
+            }
+           
+            })
+    </script>
+</body>
+</html>

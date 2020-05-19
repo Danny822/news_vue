@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>News</title>
+    <script>
+        // 一載入就執行
+        window.onload = function(){
+            get_category()
+            search_list()
+            get_page_list("all", 1);
+        }
+
+        let server_url = "http://192.168.133.161:8000/api/v1/boards/"
+        let page_limit = 5
+        var now_board_list = [] //當前 board_list
+
+        // 1. 取語系
+        function get_lang(){
+            let form = document.getElementById('lang')
+            // console.log(form.length)
+            for(let i=0; i<form.length; i++){
+                // console.log(form[i].value)
+                if(form[i].checked){
+                    let lang = form[i].value
+                    return lang
+                }
+            }
+        }
+
+        // 1-1. 點選語系切換就顯示全部資訊
+        function change() {
+            clear();
+            get_page_list("all", 1);
+        }
+        
+        
+        // 2. 取API function
+        function get_api(url,sucess,failed){
+            fetch(server_url+url)
+            .then(function(response){
+                return response.json()
+            })
+            .then(sucess)
+            .catch(failed)
+        }
+
+        // 3. 串category API
+        function get_category(){
+            get_api(
+                "category",
+                function(json_resp){
+                    // 顯示取到最新消息型態類別資料
+                    show_category(json_resp.data)
+                },
+                function(error){
+                    console.log(error)
+                }
+            )
+        }
+
+        // 4. 將取到的類型得到對應的id和名稱
+        function show_category(category){
+            for(var i=0; i<category.length; i++){
+                var category_id = category[i].id
+                var category_name = category[i].name
+                category_add(category_id, category_name);
+            }
+            // 全部類型按鈕
+            category_add("all", "all");
+        }
+
+        // 5. 將取到的資料型態id及名稱顯示在網頁上
+        function category_add(id, name){
+            let category_name = name
+            if(category_name == "sys"){
+                name = "系統"
+            }else if(category_name == "act"){
+                name = "活動"
+            }else if(category_name == "service"){
+                name = "客服"
+            }else{
+                name = "全部"
+            }
+
+            let category_ul = document.createElement('ul');
+            let category_li = document.createElement('li');
+            let category_a = document.createElement('a');
+
+            category_a.innerHTML = name
+            category_a.setAttribute('href', 'javascript:void(0);')
+            category_a.setAttribute('id', id)
+            category_a.addEventListener("click", get_board_list)
+
+            let category = document.getElementById('category')
+            category.setAttribute('style', 'display: flex')
+
+            category_li.appendChild(category_a)
+            category_ul.appendChild(category_li)
+            category.appendChild(category_ul)
+        }
+
+        // 接收取得公告列表清單事件
+    function get_board_list(e) {
+        clear()
+        let category_event_data = e.target;
+        let cat_id = category_event_data.getAttribute('id')
+        // console.log(cat_id)
+
+        //變更下拉selected屬性放置位置
+        change_selected();
+
+        // 取得公告列表
+        get_page_list(cat_id, 1);
+    }
+
+    function change_selected(){
+        //變更下拉selected屬性放置位置 
+        var sort_select = document.getElementById("sort_select")
+        var options = sort_select.options
+        var selectedIndex = sort_select.selectedIndex;
+
+        // 當前下拉所選到的排序類型
+        var selected_option = options[selectedIndex];
+
+        // 預設下拉所選到的排序類型
+        var default_selected_option = options[0];
+
+        //移除當前下拉所選到的排序類型selected屬性
+        selected_option.removeAttribute("selected")
+        //將selected屬性設定給預設
+        default_selected_option.setAttribute("selected","selected")
+
+    }
+
+    function get_page_list(cat_id, page){
+        clear() 
+        clear_search()
+        let lang = get_lang()
+        // console.log(typeof(page))
+        get_api(
+            "list/sys/" +
+            cat_id +
+            "?lang=" +
+            lang +
+            "&limit=" +
+            page_limit +
+            "&page=" +
+            page,
+    function(json_resp){
+        var board_list = json_resp.data;
+        // console.log(board_list)
+
+        // 把 board_list給當前 now_board_list
+        now_board_list = board_list
+
+        // 下拉選單排序 onchange事件
+        select_sort(board_list)
+
+        // 取得公告總筆數，計算總頁數
+        // get_num(cat_id, nowpage);
+    },
+    function(error){
+        console.log(error)
+      })
+    }
+
+    // 下拉選單排序 onchange事件
+    function select_sort(board_list){
+        // var lang = get_lang()
+        // clear_show() 
+        var sort_select = document.getElementById("sort_select")
+        var options = sort_select.options;
+        var selectedIndex = sort_select.selectedIndex;
+
+        // 預設的排序類型
+        var default_selected_option = options[0];
+
+        // 當前下拉所選到的排序類型 option
+        var selected_option = options[selectedIndex];
+
+        // 當前下拉所選到的上一個排序類型 option
+        var pre_selected_option = options[selectedIndex-1];
+
+        // 當前下拉所選到的下一個排序類型 option
+        var next_selected_option = options[selectedIndex+1];
+
+        // 複製 now_board_list 成一個新物件sort_board_list
+        // 作法一: 
+        var sort_board_list = JSON.parse(JSON.stringify(board_list)); //深層複製
+        // console.log(sort_board_list)
+
+        // 作法二: 
+        // var sort_board_list = Object.assign({}, board_list); //淺層複製
+
+        // 物件轉陣列
+        // var result = Object.keys(sort_board_list).map(i => sort_board_list[i])
+        // console.log(result)
+
+        // 依照 option中的value值 判斷是哪個排序類型
+        var option_value = get_select_id()
+
+        // 依時間排序
+        if (option_value == "option_time") {
+            default_selected_option.removeAttribute("selected")
+            next_selected_option.removeAttribute("selected")
+            selected_option.setAttribute("selected","selected")
+
+            // 拿複製好的新物件sort_board_list排序顯示
+            sort_list(sort_board_list)
+            
+            // sort_list(result) => 作法二
+          }else if (option_value == "option_not"){
+            // 不排序
+            default_selected_option.removeAttribute("selected")
+            pre_selected_option.removeAttribute("selected")
+            selected_option.setAttribute("selected","selected")
+            show_sort_data(board_list)
+            
+          }else{
+            //  尚未選擇排序類型
+            show_sort_data(board_list)
+          }
+      }
+
+       // 取下拉選單id
+      function get_select_id() {
+        var sort_select = document.getElementById("sort_select")
+        // console.log(sort_select.selectedIndex);
+        // console.log(sort_select.options);
+        var options = sort_select.options;
+        var selectedIndex = sort_select.selectedIndex;
+        var selected_option = options[selectedIndex];
+        // console.log(selected_option);
+        // console.log(selected_option.value);
+        return selected_option.value;
+      }
+
+      // 依照時間排序 (時間近的往上排)
+      function sort_list(board_list) {
+          // console.log(board_list)
+          board_list.sort(function(a,b){
+            return new Date(a.displayStartTime) > new Date(b.displayStartTime) ? -1 : 1
+          })
+          show_sort_data(board_list)
+      }
+
+    function show_sort_data(board_list){
+        clear()
+        let lang = get_lang()
+        var content = document.getElementById("content");
+        //建置列表的<ol></ol>標籤
+        var ol = document.createElement("ol");
+        content.appendChild(ol);
+
+        //準備空陣列存取
+        var li_id = [];
+        var li_title = [];
+
+        for (var i = 0; i < board_list.length; i++) {
+            // 取得公告列表id
+            var category_board_id = board_list[i]._id;
+              // 取得title
+            var category_board_title = board_list[i]["title_" + lang];
+
+            li_id.push(category_board_id);
+            li_title.push(category_board_title);
+        }
+
+            // 呼叫顯示列表清單函式
+            show_title(ol, li_id, li_title);
+
+            //建置查詢內文的按鈕
+            var content_btn = document.createElement("input");
+            content_btn.setAttribute("type", "button");
+            content_btn.setAttribute("value", "查詢內文");
+            content_btn.addEventListener("click", show_news);
+
+            content.appendChild(content_btn);
+
+    }
+
+        // 列表資訊建置
+      function show_title(content_ol, board_id, title) {
+        for (var i = 0; i < board_id.length; i++) {
+          var ol_li = document.createElement("li");
+
+          // checkbox
+          var ol_input = document.createElement("input");
+          ol_input.setAttribute("type", "checkbox");
+          ol_input.setAttribute("name", "box_name");
+          ol_input.setAttribute("tag", board_id[i]);
+
+          // 點選checkbox時 清除textarea的資訊
+          // ol_input.addEventListener("click", clear_area);
+
+          // 標題連結
+          var ol_a = document.createElement("a");
+          ol_a.innerHTML = title[i];
+          ol_a.setAttribute("href", "javascript:void(0);");
+          ol_a.setAttribute("tag", board_id[i]);
+
+          // 12-1. 將資訊顯示到textarea
+          ol_a.addEventListener("click", show_board_txt);
+
+          ol_li.appendChild(ol_input);
+          ol_li.appendChild(ol_a);
+          content_ol.appendChild(ol_li);
+
+          // 公告列表背景色設定
+          list_color(content_ol, ol_li)
+        }
+      }
+
+      // 11-3. 公告列表背景色設定
+      function list_color(content_ol, ol_li){
+
+      //計算當下<li></li>內的資料長度
+      var ol_children = content_ol.children.length + 1
+        // console.log(content_ol.children.length + 1)
+
+        if (ol_children % 2 == 0) {
+          // 偶數列
+            ol_li.setAttribute("style", "background-color: #99ccff")
+        } else {
+          // 奇數列
+            ol_li.setAttribute("style", "background-color: #ccccff")
+        }
+      } 
+
+      function show_board_txt(e){
+        var event_data = e.target 
+
+        // 取得連結中所帶的公告id
+        var board_id = event_data.getAttribute("tag")
+
+        get_board_data(show_alert, board_id)
+      }
+
+      function get_board_data(callback, board_id, selected, is_end_merge){
+        var lang = get_lang()
+        get_api(
+          "sys/" + board_id + "?lang=" + lang,
+          function(json_resp) {
+            var board_data = json_resp.data;
+            // console.log(board_data)
+            var board_data_title = board_data.title_ja; //標題
+            var content_base64 = board_data.html_ja; //內文
+          
+            //內文 base64轉碼
+            var decode_data = decodeURIComponent(escape(atob(content_base64)));
+
+            //回呼函式 
+            callback(board_data_title, decode_data, selected, is_end_merge);
+            // show_textarea(board_data_title,decode_data)
+            // alert_merge_content(board_data_title,decode_data, selected, is_end_merge)
+          },
+          function(error) {
+            console.error(error);
+          }
+        );
+      }
+
+      function show_alert(board_data_title, decode_data){
+        alert("[標題:"+  board_data_title+"]\n"+ decode_data + "\n")
+      }
+
+      //  click查詢內文按鈕，將被checked的資訊alert視窗顯示
+      function show_news(){
+        var obj_box = document.getElementsByName("box_name")
+
+        //準備空陣列來 存取已經被checked的公告id資訊
+        var selected_id = []
+
+        for(var i=0; i<obj_box.length; i++){
+          if(obj_box[i].checked){
+            var board_id = obj_box[i].getAttribute("tag")
+            selected_id.push(board_id)
+          }
+        }
+
+        //準備空陣列 來存取已經被checked的title和內文資訊
+        var selected = [];
+
+        // 跑有被選到的checkedbox
+        for(var i =0; i<selected_id.length; i++){
+          var board_id = selected_id[i]
+
+          // 已被選到的checked是否已經merge
+          var is_end_merge = i == selected_id.length - 1;
+
+          get_board_data(merge_content, board_id, selected, is_end_merge)
+        }
+        
+      }
+
+      function merge_content( title, board_content, selected, is_end_merge){
+        selected.push("[標題:" + title + "]<br>" + board_content + "<br><br><br><br><br><br><br><br><br><br><br><br>");
+        if (is_end_merge)
+          // console.log(selected)
+          document.getElementById("show_news").innerHTML = selected
+      }
+       // 15. 建置查詢
+      function search_list() {
+        var search = document.getElementById("search");
+        //建置查詢
+        var content_search = document.createElement("input");
+        content_search.setAttribute("type", "text");
+        content_search.setAttribute("id", "search_input");
+        content_search.setAttribute("placeholder", "請輸入型別");
+
+        var content_btn = document.createElement("input");
+        content_btn.setAttribute("type", "button");
+        content_btn.setAttribute("value", "搜尋");
+        content_btn.addEventListener("click", search_title);
+
+        search.appendChild(content_search);
+        search.appendChild(content_btn);
+    }
+
+    // 15-1. 搜尋欄按鈕 觸發搜尋事件
+    function search_title() {
+        var title_data = document.getElementById("search_input").value;
+        var search_id = "";
+        if (title_data == "全部") {
+          search_id = "all";
+        } else if (title_data == "系統") {
+          search_id = "146003889414";
+        } else if (title_data == "活動") {
+          search_id = "147988167211";
+        } else if (title_data == "客服") {
+          search_id = "147988314738";
+        } else {
+          alert("請輸入正確型別 !!");
+          get_page_list("all", 1);
+        }
+        // 取得公告列表
+        get_page_list(search_id, 1);
+      }
+
+      // 清除列表清單資訊
+      function clear() {
+        document.getElementById("content").innerHTML = "";
+      }
+      // 清除搜尋欄
+      function clear_search() {
+        document.getElementById("search_input").value = "";
+      }
+    </script>
+</head>
+<style>
+    #pane{
+        position: fixed;
+        top: 0;
+        right: 0;
+    }
+</style>
+<body>
+    <form id="lang" onchange="change()">
+        <label><input name="language" type="radio" value="ja" checked />日版</label>
+        <label><input name="language" type="radio" value="zh_Hant" />台版</label>
+    </form>
+      <div id="category"></div>
+      <div id="search"></div>
+      <div id="list_selected">
+        <select name="select" id="sort_select" onchange="select_sort(now_board_list)">
+          <option name="option_sort" value="default" disabled="disabled" selected="selected">請選擇是否排序</option>
+          <option name="option_sort" value="option_time">依時間排序</option>
+          <option name="option_sort" value="option_not">不排序</option>
+        </select>
+      </div>
+      </div>
+      <div id="content"></div>
+      <div id="area"></div>
+      <div id="page"></div>
+      <div id="show_news"></div>
+      <div id="pane">
+        <a href="#lang">回最上層</a><br>
+        <a href="#show_news">到查詢內文</a><br>
+    </div>
+</body>
+</html>
